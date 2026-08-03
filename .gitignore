@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Environment / secrets
+.env
+
+# Application runtime artifacts
+uploads/*
+!uploads/.gitkeep
+models/*
+!models/.gitkeep
+reports/*
+!reports/.gitkeep
+ai_ds_team.db
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
