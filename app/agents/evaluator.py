@@ -25,7 +25,7 @@ class EvaluatorAgent(BaseAgent):
         if model_path:
             try:
                 importances = feature_importance(model_path)
-            except Exception:
+            except (OSError, ValueError, KeyError, EOFError):
                 importances = {}
 
         evaluation = {

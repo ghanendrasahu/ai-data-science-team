@@ -73,7 +73,7 @@ class ReportAgent(BaseAgent):
             "",
             "---",
             "",
-            f"*Generated automatically by the AI Data Science Team.*",
+            "*Generated automatically by the AI Data Science Team.*",
             "",
         ]
         return "\n".join(lines)

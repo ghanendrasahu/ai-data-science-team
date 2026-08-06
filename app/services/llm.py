@@ -115,14 +115,14 @@ class LLMService:
     Use :meth:`LLMService.instance` everywhere so a single model is reused.
     """
 
-    _instance: "LLMService | None" = None
+    _instance: LLMService | None = None
 
     def __init__(self, backend: Any) -> None:
         self.backend = backend
         self.provider = getattr(backend, "name", "unknown")
 
     @classmethod
-    def build(cls) -> "LLMService":
+    def build(cls) -> LLMService:
         settings = get_settings()
         provider = settings.llm_provider.strip().lower()
 
@@ -137,7 +137,7 @@ class LLMService:
         return cls(backend)
 
     @classmethod
-    def instance(cls) -> "LLMService":
+    def instance(cls) -> LLMService:
         if cls._instance is None:
             cls._instance = cls.build()
         return cls._instance

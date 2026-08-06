@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from app.agents.base import BaseAgent
 from app.tools.csv_tool import load_csv, profile
@@ -31,8 +34,8 @@ class PlannerAgent(BaseAgent):
             parsed = self.llm.complete_json(self._target_prompt(data_profile))
             if isinstance(parsed, dict) and parsed.get("target"):
                 update["target"] = str(parsed["target"])
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - best-effort target detection
+            logger.warning("LLM target detection failed, keeping default: %s", exc)
         return update
 
     @staticmethod

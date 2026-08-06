@@ -48,8 +48,8 @@ def profile(df: pd.DataFrame) -> dict[str, Any]:
     Used by the planner and chat agents so the LLM sees numbers, not raw data.
     """
     profile: dict[str, Any] = {
-        "rows": int(len(df)),
-        "columns": int(len(df.columns)),
+        "rows": len(df),
+        "columns": len(df.columns),
         "column_types": infer_column_types(df),
         "missing": {},
         "duplicates": int(df.duplicated().sum()),

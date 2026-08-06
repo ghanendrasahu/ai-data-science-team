@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -127,7 +126,7 @@ def train_all(
                     "label_encoder": label_encoder,
                     "feature_names": list(X.columns),
                 }
-        except Exception as exc:  # keep the workflow alive if one model fails
+        except Exception as exc:  # noqa: BLE001 - keep the workflow alive if one model fails
             results.append({"model": name, "error": str(exc)})
 
     if best is None:
@@ -163,7 +162,7 @@ def _evaluate(pipe, X_test, y_test, task: str) -> dict[str, Any]:
     if task == "classification":
         try:
             y_proba = pipe.predict_proba(X_test)[:, 1]
-        except Exception:
+        except (AttributeError, NotImplementedError, ValueError):
             y_proba = None
         metrics = {
             "accuracy": round(float(accuracy_score(y_test, y_pred)), 4),

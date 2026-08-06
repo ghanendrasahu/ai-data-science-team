@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import pandas as pd
-
 from app.agents.base import BaseAgent
 from app.tools.csv_tool import load_csv, save_csv
 from app.tools.pandas_tool import drop_duplicates, fill_missing, winsorize_outliers
@@ -28,7 +26,7 @@ class CleaningAgent(BaseAgent):
 
         summary = {
             "rows_before": before_rows,
-            "rows_after": int(len(df)),
+            "rows_after": len(df),
             "missing_before": before_missing,
             "missing_after": int(df.isna().sum().sum()),
             "outliers_capped": True,

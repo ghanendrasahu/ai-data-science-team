@@ -22,7 +22,7 @@ class TrainerAgent(BaseAgent):
         if target not in df.columns:
             raise ValueError(f"Target column '{target}' missing after feature engineering.")
 
-        X, y, feature_names = prepare_for_ml(df, target)
+        X, y, _ = prepare_for_ml(df, target)
         task = detect_task(y)
 
         training = train_all(

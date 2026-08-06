@@ -92,7 +92,7 @@ def health() -> dict[str, str]:
 
 
 @app.post("/upload")
-async def upload(file: UploadFile = File(...)) -> dict[str, Any]:
+async def upload(file: UploadFile = File(...)) -> dict[str, Any]:  # noqa: B008 - FastAPI injects the file
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are supported.")
 
@@ -172,7 +172,7 @@ def _execute(run_id: str, req: RunRequest) -> None:
         }
         result = run_pipeline(initial)
         store.set_result(run_id, result)
-    except Exception as exc:  # pragma: no cover - surfaced via the API
+    except Exception as exc:  # noqa: BLE001 - surfaced via the API; must catch all pipeline errors
         store.set_status(run_id, "failed", str(exc))
 
 
