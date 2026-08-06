@@ -81,6 +81,7 @@ EDA Agent    Cleaning Agent   Feature Agent
 * Encoding categorical variables
 * Scaling numerical features
 * Feature importance analysis
+* **Automated feature selection** (keeps the strongest `MAX_FEATURES` features)
 
 ## Machine Learning Agent
 
@@ -88,6 +89,7 @@ EDA Agent    Cleaning Agent   Feature Agent
 * Training pipeline creation
 * Multiple model comparison
 * Hyperparameter tuning
+* **Experiment tracking** (SQLite built-in + optional MLflow)
 
 Supported models:
 
@@ -104,6 +106,31 @@ Supported models:
 * Model comparison
 * Error analysis
 * Model recommendation
+
+## SQL Agent
+
+* Natural-language questions → read-only SELECT queries
+* Aggregate / filter / group analysis on uploaded datasets
+* Safe in-memory SQLite execution (only SELECT allowed)
+
+## Model Deployment Agent
+
+* Packages the winning model into a self-contained bundle
+* `schema.json`, `predict.py` and a copy of the model artifact
+* `POST /deploy/{run_id}` + `POST /predict` endpoints
+* Optional GitHub report export (`POST /export/github/{run_id}`)
+
+## Vector Memory
+
+* Stores run summaries as embeddings (TF-IDF)
+* Semantic retrieval across previous runs via `POST /memory/search`
+* Lets agents remember what has been learned before (cross-run memory)
+
+## Monitoring
+
+* `GET /monitoring/overview` (run counts, statuses, memory size)
+* `GET /runs/recent` (per-run summaries + metrics)
+* `POST /memory/search`
 
 ## AI Report Generator
 
@@ -219,20 +246,26 @@ ai-data-science-team/
 │   │   └── sklearn_tool.py
 │   │
 │   ├── services/
-│   │   └── llm.py
+│   │   ├── llm.py
+│   │   ├── store.py
+│   │   ├── tracking.py
+│   │   ├── memory.py
+│   │   └── github.py
 │   │
+│   ├── config.py
 │   └── main.py
 │
 ├── frontend/
 │   └── app.py
-│
+
 ├── uploads/
 ├── models/
 ├── reports/
+├── deployments/
 │
 ├── requirements.txt
 ├── Dockerfile
-├── .env
+├── .env.example
 └── README.md
 ```
 
@@ -356,18 +389,24 @@ streamlit run frontend/app.py
 * [x] Streamlit UI
 * [x] Docker
 * [x] Deployment
-* [ ] Monitoring
+* [x] Monitoring
+
+## Phase 6 — Platform Extensions
+
+* [x] MCP tools (stdio server via `python -m app.mcp_server`)
+* [x] Vector database memory (cross-run retrieval)
+* [x] SQL database agent
+* [x] Automated feature selection
+* [x] Model deployment agent
+* [x] GitHub report export (optional)
+* [x] Experiment tracking (optional MLflow)
 
 ---
 
 # 🎯 Future Improvements
 
-* Add MCP tools
-* Add vector database memory
-* Add SQL database agent
-* Add automated feature selection
-* Add model deployment agent
-* Add GitHub integration
+* Add vector database memory with real embeddings (FAISS / Chroma)
+* Add automated feature selection with tree-based importance
 * Add automated experiment tracking with MLflow
 
 ---
@@ -380,7 +419,6 @@ Technologies demonstrated:
 
 * Generative AI
 * Agentic AI
-* RAG
 * LLM Applications
 * Machine Learning
 * MLOps Concepts

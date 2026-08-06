@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from app.agents.base import BaseAgent
+from app.config import get_settings
 from app.tools.csv_tool import load_csv
 from app.tools.pandas_tool import prepare_for_ml
 from app.tools.sklearn_tool import detect_task, train_all
@@ -25,12 +26,14 @@ class TrainerAgent(BaseAgent):
         X, y, _ = prepare_for_ml(df, target)
         task = detect_task(y)
 
+        settings = get_settings()
         training = train_all(
             X=X,
             y=y,
             task=task,
             model_dir=f"{state['work_dir']}/models",
             tune=state.get("tune", False),
+            max_features=settings.max_features if settings.feature_selection else 0,
         )
 
         narrative = self.llm.complete(

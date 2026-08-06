@@ -15,7 +15,10 @@ models/*
 !models/.gitkeep
 reports/*
 !reports/.gitkeep
+deployments/*
+!deployments/.gitkeep
 ai_ds_team.db
+mlruns/
 
 # IDE / OS
 .idea/

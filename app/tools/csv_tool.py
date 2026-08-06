@@ -2,16 +2,53 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
+_MAX_CACHE = 16
+
+
+def _cache_key(path: Path) -> tuple[Any, ...]:
+    try:
+        stat = path.stat()
+        return (str(path), stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return (str(path), 0, 0)
+
 
 def load_csv(path: str | Path) -> pd.DataFrame:
-    """Load a CSV with encoding fallback so real-world files keep working."""
+    """Load a CSV with encoding fallback so real-world files keep working.
+
+    Results are cached by ``(path, mtime, size)`` so repeated loads inside a
+    single workflow run avoid re-reading and re-parsing the same file.
+    """
     path = Path(path)
+    key = _cache_key(path)
+    cached = _CACHE.get(key)
+    if cached is not None:
+        return cached.copy()
+
+    frame = _read_csv(path)
+    _CACHE[key] = frame.copy()
+    _CACHE.move_to_end(key)
+    while len(_CACHE) > _MAX_CACHE:
+        _CACHE.popitem(last=False)
+    return frame
+
+
+_CACHE: OrderedDict[tuple[Any, ...], pd.DataFrame] = OrderedDict()
+
+
+def clear_csv_cache() -> None:
+    """Drop all cached dataframes (e.g. after tests or long-running servers)."""
+    _CACHE.clear()
+
+
+def _read_csv(path: Path) -> pd.DataFrame:
     for encoding in ("utf-8", "latin-1", "cp1252"):
         try:
             return pd.read_csv(path, encoding=encoding)

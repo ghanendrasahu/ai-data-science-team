@@ -8,6 +8,7 @@ from typing import Any
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.feature_selection import SelectKBest, f_classif, f_regression
 from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, StandardScaler
@@ -20,6 +21,33 @@ def detect_task(y: pd.Series) -> str:
     if is_numeric(y) and y.nunique() > 20:
         return "regression"
     return "classification"
+
+
+def select_features(
+    X: pd.DataFrame,
+    y: pd.Series,
+    task: str,
+    max_features: int = 0,
+    random_state: int = 42,
+) -> tuple[pd.DataFrame, list[str]]:
+    """Rank features with univariate tests and keep the strongest ``max_features``.
+
+    Returns ``(X_subset, selected_names)``. When ``max_features`` is ``0`` the
+    original frame is returned untouched, so callers can opt out cheaply.
+    """
+    if max_features <= 0 or max_features >= X.shape[1]:
+        return X, list(X.columns)
+
+    selector = _make_selector(task, max_features, random_state)
+    selected = selector.fit_transform(X, y)
+    mask = selector.get_support()
+    names = [col for col, keep in zip(X.columns, mask.tolist()) if keep]
+    return pd.DataFrame(selected, columns=names, index=X.index), names
+
+
+def _make_selector(task: str, max_features: int, random_state: int):
+    score_fn = f_classif if task == "classification" else f_regression
+    return SelectKBest(score_fn, k=max_features)
 
 
 def classification_models(random_state: int = 42) -> dict[str, Any]:
@@ -78,6 +106,7 @@ def train_all(
     tune: bool = False,
     cv_folds: int = 5,
     random_state: int = 42,
+    max_features: int = 0,
 ) -> dict[str, Any]:
     """Train every model in the zoo, cross-validate, and persist the best.
 
@@ -86,6 +115,14 @@ def train_all(
     """
     model_dir = Path(model_dir)
     model_dir.mkdir(parents=True, exist_ok=True)
+
+    if max_features > 0 and max_features < X.shape[1]:
+        original = list(X.columns)
+        X, selected_names = select_features(X, y, task, max_features, random_state)
+        dropped = [col for col in original if col not in selected_names]
+    else:
+        selected_names = list(X.columns)
+        dropped = []
 
     label_encoder = None
     if task == "classification":
@@ -102,6 +139,7 @@ def train_all(
 
     results: list[dict[str, Any]] = []
     best: dict[str, Any] | None = None
+    artifact: dict[str, Any] | None = None
 
     for name, estimator in zoo.items():
         try:
@@ -129,7 +167,7 @@ def train_all(
         except Exception as exc:  # noqa: BLE001 - keep the workflow alive if one model fails
             results.append({"model": name, "error": str(exc)})
 
-    if best is None:
+    if best is None or artifact is None:
         raise RuntimeError("No model could be trained on this dataset.")
 
     model_path = model_dir / "best_model.joblib"
@@ -141,6 +179,8 @@ def train_all(
         "best_model": {**best, "path": str(model_path)},
         "label_encoder": label_encoder.classes_.tolist() if label_encoder is not None else None,
         "feature_names": list(X.columns),
+        "feature_selection_applied": bool(dropped),
+        "features_dropped": dropped,
     }
 
 

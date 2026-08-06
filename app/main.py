@@ -26,6 +26,7 @@ from pydantic import BaseModel, Field
 from app.agents.chatbot import ChatbotAgent
 from app.config import get_settings
 from app.graph.workflow import agent_names, run_pipeline
+from app.services import memory, tracking
 from app.services.store import get_store
 
 settings = get_settings()
@@ -40,6 +41,18 @@ app.add_middleware(
 )
 
 _chatbot = ChatbotAgent()
+
+
+# --------------------------------------------------------------------------- #
+# MCP endpoint metadata (optional, requires the `mcp` package)
+# --------------------------------------------------------------------------- #
+def _mcp_available() -> bool:
+    try:
+        from app import mcp_server
+
+        return mcp_server._MCP_AVAILABLE
+    except Exception:  # noqa: BLE001 - optional integration must never break startup
+        return False
 
 
 # --------------------------------------------------------------------------- #
@@ -62,6 +75,22 @@ class RunResponse(BaseModel):
     detail: str = ""
 
 
+class SQLRequest(BaseModel):
+    question: str = Field(..., min_length=1, max_length=1000)
+    dataset_path: str | None = None
+
+
+class PredictRequest(BaseModel):
+    run_id: str
+    csv_path: str
+
+
+class DeployResponse(BaseModel):
+    run_id: str
+    path: str
+    status: str
+
+
 # --------------------------------------------------------------------------- #
 # Lifecycle
 # --------------------------------------------------------------------------- #
@@ -70,6 +99,7 @@ def _ensure_dirs() -> None:
     settings.upload_dir_path.mkdir(parents=True, exist_ok=True)
     settings.model_dir_path.mkdir(parents=True, exist_ok=True)
     settings.report_dir_path.mkdir(parents=True, exist_ok=True)
+    settings.deploy_dir_path.mkdir(parents=True, exist_ok=True)
     get_store()
 
 
@@ -83,12 +113,31 @@ def root() -> dict[str, Any]:
         "version": settings.app_version,
         "agents": agent_names(),
         "provider": _provider_label(),
+        "mcp": _mcp_available(),
     }
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/monitoring/overview")
+def monitoring_overview() -> dict[str, Any]:
+    """High-level operational overview: run counts and memory size."""
+    from app.services.store import get_store
+
+    store = get_store()
+    runs = store.list_runs(100)
+    statuses: dict[str, int] = {}
+    for run in runs:
+        statuses[run["status"]] = statuses.get(run["status"], 0) + 1
+    return {
+        "total_runs": len(runs),
+        "by_status": statuses,
+        "memory_docs": memory.count(),
+        "tracking_mlflow": tracking.available(),
+    }
 
 
 @app.post("/upload")
@@ -152,6 +201,89 @@ def get_report(name: str) -> dict[str, str]:
     return {"name": candidate.name, "markdown": candidate.read_text(encoding="utf-8")}
 
 
+@app.post("/sql")
+def run_sql_query(req: SQLRequest) -> dict[str, Any]:
+    """Natural-language SQL question against an uploaded dataset."""
+    from app.agents.sql_agent import SQLAgent
+
+    dataset_path = req.dataset_path
+    if not dataset_path:
+        store = get_store()
+        record = store.get_run(_latest_run_id(store))
+        dataset_path = (record or {}).get("dataset_path") if record else None
+    if not dataset_path:
+        raise HTTPException(status_code=404, detail="No dataset available; upload or start a run first.")
+
+    return SQLAgent().answer(req.question, dataset_path)
+
+
+@app.get("/runs/recent")
+def recent_runs(limit: int = Query(default=10, ge=1, le=50)) -> list[dict[str, Any]]:
+    """Run summaries for dashboards / monitoring."""
+    return tracking.recent_runs(limit)
+
+
+@app.post("/memory/search")
+def memory_search(query: str, top_k: int = Query(default=3, ge=1, le=10)) -> list[dict[str, Any]]:
+    """Search prior run knowledge stored in the vector memory."""
+    return memory.search(query, top_k)
+
+
+@app.post("/deploy/{run_id}", response_model=DeployResponse)
+def deploy_run(run_id: str) -> DeployResponse:
+    """Package a finished run's best model for production serving."""
+    from app.agents.deploy import DeploymentAgent
+
+    store = get_store()
+    record = store.get_run(run_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"Run not found: {run_id}")
+    result = record.get("result") or {}
+    bundle = DeploymentAgent().run({**result, "run_id": run_id})["deployment_summary"]
+    if "error" in bundle:
+        raise HTTPException(status_code=400, detail=bundle["error"])
+    return DeployResponse(run_id=run_id, path=bundle["path"], status="deployed")
+
+
+@app.post("/predict")
+def predict(req: PredictRequest) -> dict[str, Any]:
+    """Run predictions with a deployed model against a CSV file."""
+    bundle_dir = settings.deploy_dir_path / Path(req.run_id).name
+    predictor = bundle_dir / "predict.py"
+    if not predictor.is_file():
+        raise HTTPException(status_code=404, detail="Deployment not found; deploy the run first.")
+
+    import importlib.util
+    import sys
+
+    spec = importlib.util.spec_from_file_location("_bundle_predict", predictor)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["_bundle_predict"] = module
+    spec.loader.exec_module(module)
+
+    dataset = settings.upload_dir_path / Path(req.csv_path).name
+    if not dataset.is_file():
+        raise HTTPException(status_code=404, detail=f"CSV not found: {req.csv_path}")
+    try:
+        predictions = module.predict_csv(dataset)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Prediction failed: {exc}") from exc
+    return {"run_id": req.run_id, "predictions": predictions}
+
+
+@app.post("/export/github/{run_id}")
+def export_github(run_id: str) -> dict[str, Any]:
+    """Publish a run's report to a configured GitHub repository."""
+    from app.services.github import is_configured, publish_report
+
+    if not is_configured():
+        raise HTTPException(status_code=400, detail="GitHub export is not configured.")
+    try:
+        return publish_report(run_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 # --------------------------------------------------------------------------- #
 # Internal helpers
 # --------------------------------------------------------------------------- #
@@ -160,20 +292,53 @@ def _execute(run_id: str, req: RunRequest) -> None:
     store = get_store()
     store.set_status(run_id, "running")
 
-    work_dir = settings.upload_dir_path / f"run_{run_id}"
+    work_dir_path = settings.upload_dir_path / f"run_{run_id}"
     try:
         initial = {
             "run_id": run_id,
             "dataset_path": str(settings.upload_dir_path / req.filename),
-            "work_dir": str(work_dir),
+            "work_dir": str(work_dir_path),
             "target": req.target,
             "tune": req.tune,
             "status": "planner_started",
         }
         result = run_pipeline(initial)
         store.set_result(run_id, result)
+        _record_artifacts(run_id, result)
     except Exception as exc:  # noqa: BLE001 - surfaced via the API; must catch all pipeline errors
         store.set_status(run_id, "failed", str(exc))
+        tracking.log_run(run_id, params={"status": "failed"}, tags={"error": str(exc)})
+
+
+def _record_artifacts(run_id: str, result: dict[str, Any]) -> None:
+    best = result.get("best_model") or {}
+    metrics = dict(best.get("test_metrics") or {})
+    tracking.log_run(
+        run_id,
+        params={"target": result.get("target"), "task": result.get("task"), "model": best.get("model")},
+        metrics={"cv_mean": best.get("cv_mean"), **{f"test_{k}": v for k, v in metrics.items()}},
+        tags={"status": "succeeded"},
+    )
+    summary = _memory_summary(result)
+    if summary:
+        memory.embed_store(summary, metadata={"run_id": run_id}, key=f"run:{run_id}")
+
+
+def _memory_summary(result: dict[str, Any]) -> str:
+    best = result.get("best_model") or {}
+    eval_summary = result.get("evaluation_summary") or {}
+    return "\n".join(
+        [
+            f"Dataset task: {result.get('task')}",
+            f"Best model: {best.get('model')} (CV {best.get('cv_mean')})",
+            f"Features: {eval_summary.get('feature_importance')}",
+        ]
+    )
+
+
+def _latest_run_id(store) -> str | None:
+    runs = store.list_runs(1)
+    return runs[0]["run_id"] if runs else None
 
 
 def _provider_label() -> str:

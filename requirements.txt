@@ -23,3 +23,7 @@ plotly>=5.22
 streamlit>=1.57
 python-dotenv>=1.0
 requests>=2.32
+mcp>=2.0
+
+# Optional integrations
+# mlflow>=2.12    # experiment tracking (MLFLOW_TRACKING_URI)

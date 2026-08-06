@@ -41,7 +41,15 @@ class Settings(BaseSettings):
     upload_dir: str = "uploads"
     model_dir: str = "models"
     report_dir: str = "reports"
+    deploy_dir: str = "deployments"
     sqlite_db: str = "ai_ds_team.db"
+
+    feature_selection: bool = True
+    max_features: int = 0
+
+    github_token: str = ""
+    github_repo: str = ""
+    mlflow_tracking_uri: str = ""
 
     @property
     def upload_dir_path(self) -> Path:
@@ -54,6 +62,10 @@ class Settings(BaseSettings):
     @property
     def report_dir_path(self) -> Path:
         return self._ensure(PROJECT_ROOT / self.report_dir)
+
+    @property
+    def deploy_dir_path(self) -> Path:
+        return self._ensure(PROJECT_ROOT / self.deploy_dir)
 
     @property
     def sqlite_path(self) -> Path:
