@@ -8,7 +8,7 @@ the API instead of blocking the pipeline.
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any
+from typing import Any, cast
 
 from langgraph.graph import END, START, StateGraph
 
@@ -41,7 +41,7 @@ def build_graph():
     builder = StateGraph(WorkflowState)
 
     for name, agent in _AGENTS.items():
-        builder.add_node(name, agent)
+        builder.add_node(name, agent)  # type: ignore[arg-type] - BaseAgent is a valid LangGraph node
 
     builder.add_edge(START, "planner")
     builder.add_edge("planner", "eda")
@@ -57,7 +57,7 @@ def build_graph():
 
 def run_pipeline(initial_state: dict[str, Any]) -> dict[str, Any]:
     """Execute the full pipeline for one dataset and return the final state."""
-    result = build_graph().invoke(initial_state)
+    result = build_graph().invoke(cast(WorkflowState, initial_state))
     return dict(result)
 
 

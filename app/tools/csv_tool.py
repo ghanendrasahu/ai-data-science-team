@@ -29,7 +29,7 @@ def save_csv(df: pd.DataFrame, path: str | Path) -> Path:
     return path
 
 
-def _classify_dtype(dtype: np.dtype) -> str:
+def _classify_dtype(dtype: Any) -> str:
     if pd.api.types.is_numeric_dtype(dtype):
         return "numeric"
     if pd.api.types.is_datetime64_any_dtype(dtype):

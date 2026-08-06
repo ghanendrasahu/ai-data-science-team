@@ -50,7 +50,7 @@ class FeatureAgent(BaseAgent):
             if is_numeric(df[col]) or col == target:
                 continue
             if df[col].nunique() <= 50:
-                df[col] = LabelEncoder().fit_transform(df[col])
+                df[col] = pd.Series(LabelEncoder().fit_transform(df[col]), index=df.index)
                 encoded.append(col)
             else:
                 df[col] = df[col].astype("category").cat.codes

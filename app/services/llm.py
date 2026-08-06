@@ -74,8 +74,11 @@ class AnthropicService:
 
     def __init__(self, api_key: str, model: str) -> None:
         from langchain_anthropic import ChatAnthropic
+        from pydantic import SecretStr
 
-        self._llm = ChatAnthropic(model=model, api_key=api_key, temperature=0.2)
+        self._llm = ChatAnthropic(
+            model_name=model, api_key=SecretStr(api_key), temperature=0.2, timeout=None, stop=None
+        )
 
     def invoke(self, prompt: str) -> str:
         return str(self._llm.invoke(prompt).content)
@@ -88,8 +91,9 @@ class OpenAIService:
 
     def __init__(self, api_key: str, model: str) -> None:
         from langchain_openai import ChatOpenAI
+        from pydantic import SecretStr
 
-        self._llm = ChatOpenAI(model=model, api_key=api_key, temperature=0.2)
+        self._llm = ChatOpenAI(model=model, api_key=SecretStr(api_key), temperature=0.2)
 
     def invoke(self, prompt: str) -> str:
         return str(self._llm.invoke(prompt).content)
