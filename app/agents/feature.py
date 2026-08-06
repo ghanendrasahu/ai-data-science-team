@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 
@@ -50,7 +51,7 @@ class FeatureAgent(BaseAgent):
             if is_numeric(df[col]) or col == target:
                 continue
             if df[col].nunique() <= 50:
-                df[col] = pd.Series(LabelEncoder().fit_transform(df[col]), index=df.index)
+                df[col] = pd.Series(np.asarray(LabelEncoder().fit_transform(df[col])), index=df.index)
                 encoded.append(col)
             else:
                 df[col] = df[col].astype("category").cat.codes
