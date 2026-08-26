@@ -6,10 +6,10 @@ import json
 import logging
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from app.agents.base import BaseAgent
 from app.tools.csv_tool import load_csv, profile
+
+logger = logging.getLogger(__name__)
 
 
 class PlannerAgent(BaseAgent):

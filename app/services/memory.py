@@ -23,10 +23,18 @@ _LOCK = threading.Lock()
 
 
 def embed_store(text: str, metadata: dict[str, Any] | None = None, key: str = "") -> str:
-    """Store a text snippet with its embedding and return a document id."""
+    """Store a text snippet with its embedding and return a document id.
+
+    The TF-IDF vectorizer is re-fit over the whole corpus on every write and all
+    existing documents are re-embedded, so every stored vector lives in a single
+    consistent feature space and stays comparable to later queries.
+    """
     record_id = key or uuid.uuid4().hex[:12]
-    vector = _vector([text])[0]
-    _upsert(record_id, text, vector, metadata)
+    existing = _documents()
+    matrix = _embed([doc["text"] for doc in existing] + [text], fit=True)
+    _upsert(record_id, text, matrix[-1], metadata)
+    for doc, vector in zip(existing, matrix[:-1]):
+        _upsert(doc["id"], doc["text"], vector, doc["metadata"])
     return record_id
 
 
@@ -35,8 +43,8 @@ def search(query: str, top_k: int = 3) -> list[dict[str, Any]]:
     docs = _documents()
     if not docs:
         return []
-    query_vec = _vector([query])[0]
-    matrix = np.vstack([doc["vector"] for doc in docs])
+    matrix = _embed([doc["text"] for doc in docs], fit=True)
+    query_vec = _embed([query], fit=False)[0]
     sims = _cosine(matrix, query_vec)
     order = np.argsort(sims)[::-1][:top_k]
     return [
@@ -64,15 +72,29 @@ def forget(doc_id: str) -> None:
 # --------------------------------------------------------------------------- #
 # Embedding helpers
 # --------------------------------------------------------------------------- #
-def _vector(texts: list[str]) -> np.ndarray:
+_MIN_DIM = 64
+
+
+def _embed(texts: list[str], fit: bool) -> np.ndarray:
+    """Embed ``texts``, (re)fitting the vectorizer when ``fit`` is True.
+
+    Callers must fit before transforming within one operation so the query
+    vector lives in the same feature space as the stored corpus vectors.
+    """
     from sklearn.feature_extraction.text import TfidfVectorizer
 
-    if not hasattr(_vector, "_vectorizer"):
-        _vector._vectorizer = TfidfVectorizer(max_features=512)  # type: ignore[attr-defined]
-    matrix = _vector._vectorizer.fit_transform([t or "" for t in texts]).toarray()  # type: ignore[attr-defined]
-    if matrix.shape[1] < 64:
-        matrix = np.hstack([matrix, np.zeros((matrix.shape[0], 64 - matrix.shape[1]))])
+    if not hasattr(_embed, "_vectorizer"):
+        _embed._vectorizer = TfidfVectorizer(max_features=512)  # type: ignore[attr-defined]
+    transform = _embed._vectorizer.fit_transform if fit else _embed._vectorizer.transform  # type: ignore[attr-defined]
+    matrix = np.asarray(_dense(transform([t or "" for t in texts])))
+    if matrix.shape[1] < _MIN_DIM:
+        matrix = np.hstack([matrix, np.zeros((matrix.shape[0], _MIN_DIM - matrix.shape[1]))])
     return matrix
+
+
+def _dense(matrix: Any) -> Any:
+    """Densify a sparse matrix, passing dense inputs through unchanged."""
+    return matrix.toarray() if hasattr(matrix, "toarray") else matrix
 
 
 def _cosine(matrix: np.ndarray, vec: np.ndarray) -> np.ndarray:

@@ -209,8 +209,10 @@ def run_sql_query(req: SQLRequest) -> dict[str, Any]:
     dataset_path = req.dataset_path
     if not dataset_path:
         store = get_store()
-        record = store.get_run(_latest_run_id(store))
-        dataset_path = (record or {}).get("dataset_path") if record else None
+        run_id = _latest_run_id(store)
+        if run_id:
+            record = store.get_run(run_id)
+            dataset_path = (record or {}).get("dataset_path") if record else None
     if not dataset_path:
         raise HTTPException(status_code=404, detail="No dataset available; upload or start a run first.")
 
@@ -257,6 +259,8 @@ def predict(req: PredictRequest) -> dict[str, Any]:
     import sys
 
     spec = importlib.util.spec_from_file_location("_bundle_predict", predictor)
+    if spec is None or spec.loader is None:
+        raise HTTPException(status_code=500, detail="Could not load the predictor module.")
     module = importlib.util.module_from_spec(spec)
     sys.modules["_bundle_predict"] = module
     spec.loader.exec_module(module)
