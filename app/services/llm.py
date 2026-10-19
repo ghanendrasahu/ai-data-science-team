@@ -54,7 +54,9 @@ class MockLLM:
         if "plan" in low or "workflow" in low:
             return self._default_plan
         if "target" in low or "predict" in low:
-            return "Choose the column with the highest cardinality as the default target."
+            return (
+                "Choose the column with the highest cardinality as the default target."
+            )
         if "insight" in low or "business" in low:
             return (
                 "Key finding: the dataset is balanced with limited missing data. "
@@ -77,7 +79,12 @@ class AnthropicService:
         from pydantic import SecretStr
 
         self._llm = ChatAnthropic(
-            model_name=model, api_key=SecretStr(api_key), temperature=0.2, timeout=None, stop=None
+            model_name=model,
+            api_key=SecretStr(api_key),
+            temperature=0.2,
+            timeout=60,
+            max_retries=1,
+            stop=None,
         )
 
     def invoke(self, prompt: str) -> str:
@@ -93,7 +100,13 @@ class OpenAIService:
         from langchain_openai import ChatOpenAI
         from pydantic import SecretStr
 
-        self._llm = ChatOpenAI(model=model, api_key=SecretStr(api_key), temperature=0.2)
+        self._llm = ChatOpenAI(
+            model=model,
+            api_key=SecretStr(api_key),
+            temperature=0.2,
+            timeout=60,
+            max_retries=1,
+        )
 
     def invoke(self, prompt: str) -> str:
         return str(self._llm.invoke(prompt).content)
@@ -113,6 +126,8 @@ class GroqService(OpenAIService):
             api_key=SecretStr(api_key),
             base_url=base_url,
             temperature=0.2,
+            timeout=60,
+            max_retries=1,
         )
 
 
@@ -124,7 +139,12 @@ class OllamaService:
     def __init__(self, model: str, base_url: str) -> None:
         from langchain_community.chat_models import ChatOllama
 
-        self._llm = ChatOllama(model=model, base_url=base_url, temperature=0.2)
+        self._llm = ChatOllama(
+            model=model,
+            base_url=base_url,
+            temperature=0.2,
+            client_kwargs={"timeout": 60},
+        )
 
     def invoke(self, prompt: str) -> str:
         return str(self._llm.invoke(prompt).content)
@@ -148,7 +168,9 @@ class LLMService:
         provider = settings.llm_provider.strip().lower()
 
         if provider == "anthropic" and settings.anthropic_api_key:
-            backend = AnthropicService(settings.anthropic_api_key, settings.anthropic_model)
+            backend = AnthropicService(
+                settings.anthropic_api_key, settings.anthropic_model
+            )
         elif provider == "openai" and settings.openai_api_key:
             backend = OpenAIService(settings.openai_api_key, settings.openai_model)
         elif provider == "groq" and settings.groq_api_key:

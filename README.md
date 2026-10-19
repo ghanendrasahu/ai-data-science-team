@@ -333,6 +333,20 @@ or for local models:
 OLLAMA_MODEL=llama3
 ```
 
+### API key (recommended)
+
+Set the same value on both processes to require `X-API-Key` on mutating endpoints:
+
+```
+# backend (.env)
+API_KEY=change-me-in-production
+
+# dashboard / Streamlit environment
+DS_TEAM_API_KEY=change-me-in-production
+```
+
+When `API_KEY` is empty the backend stays open (with a startup warning). Comparison is constant-time, and the dashboard sends the header on every request.
+
 ---
 
 # ▶️ Running the Application
