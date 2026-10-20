@@ -37,7 +37,22 @@ def test_cors_allowed_origin_is_echoed():
             "Access-Control-Request-Method": "POST",
         },
     )
-    assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"
+    assert (
+        response.headers.get("access-control-allow-origin") == "http://localhost:5173"
+    )
+
+
+def test_security_headers_present():
+    client = _client()
+    response = client.get("/health")
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+    assert (
+        response.headers["permissions-policy"]
+        == "camera=(), microphone=(), geolocation=()"
+    )
+    assert response.headers["strict-transport-security"].startswith("max-age=")
 
 
 def test_write_route_open_without_api_key():
@@ -64,14 +79,18 @@ def test_sql_rejects_dataset_path_outside_uploads(tmp_path):
     client = _client()
     outside = tmp_path / "secret.csv"
     outside.write_text("a,b\n1,2\n", encoding="utf-8")
-    response = client.post("/sql", json={"question": "rows?", "dataset_path": str(outside)})
+    response = client.post(
+        "/sql", json={"question": "rows?", "dataset_path": str(outside)}
+    )
     assert response.status_code == 400
     assert "uploaded dataset" in response.json()["detail"]
 
 
 def test_sql_flattens_traversal_names():
     """A relative `../x.csv` must be flattened to a file *inside* uploads/."""
-    response = _client().post("/sql", json={"question": "rows?", "dataset_path": "../../x.csv"})
+    response = _client().post(
+        "/sql", json={"question": "rows?", "dataset_path": "../../x.csv"}
+    )
     # Resolves inside uploads/ -> simply "not found", never an escape.
     assert response.status_code == 404
     assert "not found" in response.json()["detail"]

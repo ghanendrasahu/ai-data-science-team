@@ -19,6 +19,7 @@ import logging
 import secrets
 import shutil
 import uuid
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,8 @@ from fastapi import (
     File,
     HTTPException,
     Query,
+    Request,
+    Response,
     Security,
     UploadFile,
 )
@@ -52,6 +55,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def security_headers(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    """Apply the fleet's baseline security headers to every response."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy", "camera=(), microphone=(), geolocation=()"
+    )
+    response.headers.setdefault(
+        "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+    )
+    return response
+
 
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
