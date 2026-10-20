@@ -1,0 +1,40 @@
+# Render blueprint for ai-data-science-team.
+# Mirrors the live service configuration; inert until an explicit Blueprint Sync.
+# Secret values are declared with sync:false and stay in the Render dashboard.
+services:
+- type: web
+  name: ai-data-science-team-api
+  runtime: python
+  plan: free
+  region: oregon
+  branch: main
+  buildCommand: pip install -r requirements.txt
+  startCommand: sh -c "uvicorn app.main:app --host 0.0.0.0 --port=${PORT:-10000}"
+  healthCheckPath: /health
+  autoDeploy: true
+  envVars:
+  - key: API_KEY
+    sync: false
+  - key: GROQ_API_KEY
+    sync: false
+  - key: GROQ_MODEL
+    value: openai/gpt-oss-20b
+  - key: LLM_PROVIDER
+    value: groq
+  - key: OPENAI_API_KEY
+    sync: false
+- type: web
+  name: ai-data-science-team-ui
+  runtime: python
+  plan: free
+  region: oregon
+  branch: main
+  buildCommand: pip install "streamlit>=1.46,<2" "requests>=2.31,<3"
+  startCommand: sh -c "streamlit run frontend/app.py --server.port=${PORT:-10000} --server.address=0.0.0.0 --server.headless=true"
+  healthCheckPath: /_stcore/health
+  autoDeploy: true
+  envVars:
+  - key: DS_TEAM_API_BASE
+    value: https://ai-data-science-team-api.onrender.com
+  - key: DS_TEAM_API_KEY
+    sync: false
