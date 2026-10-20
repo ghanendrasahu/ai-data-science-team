@@ -15,6 +15,8 @@ Endpoints
 
 from __future__ import annotations
 
+import logging
+import secrets
 import shutil
 import uuid
 from pathlib import Path
@@ -56,8 +58,20 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 async def require_api_key(x_api_key: str | None = Security(_api_key_header)) -> None:
     """Gate mutating endpoints when ``API_KEY`` is configured (off when empty)."""
-    if settings.api_key and x_api_key != settings.api_key:
-        raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key header.")
+    if settings.api_key and not secrets.compare_digest(
+        x_api_key or "", settings.api_key
+    ):
+        raise HTTPException(
+            status_code=401, detail="Invalid or missing X-API-Key header."
+        )
+
+
+if not settings.api_key:
+    logging.getLogger(__name__).warning(
+        "API_KEY is not set: mutating endpoints are unauthenticated. "
+        "Set API_KEY on the backend and DS_TEAM_API_KEY on the dashboard to enable auth."
+    )
+
 
 _chatbot = ChatbotAgent()
 
@@ -194,11 +208,15 @@ async def upload(file: UploadFile = File(...)) -> dict[str, Any]:  # noqa: B008 
     return {"filename": destination.name, "path": str(destination)}
 
 
-@app.post("/workflow", response_model=RunResponse, dependencies=[Depends(require_api_key)])
+@app.post(
+    "/workflow", response_model=RunResponse, dependencies=[Depends(require_api_key)]
+)
 def start_workflow(req: RunRequest, background_tasks: BackgroundTasks) -> RunResponse:
     dataset_path = settings.upload_dir_path / Path(req.filename).name
     if not dataset_path.is_file():
-        raise HTTPException(status_code=404, detail=f"Uploaded file not found: {req.filename}")
+        raise HTTPException(
+            status_code=404, detail=f"Uploaded file not found: {req.filename}"
+        )
 
     store = get_store()
     run_id = store.create_run(str(dataset_path), req.target)
@@ -256,7 +274,9 @@ def run_sql_query(req: SQLRequest) -> dict[str, Any]:
             record = store.get_run(run_id)
             dataset_path = (record or {}).get("dataset_path") if record else None
     if not dataset_path:
-        raise HTTPException(status_code=404, detail="No dataset available; upload or start a run first.")
+        raise HTTPException(
+            status_code=404, detail="No dataset available; upload or start a run first."
+        )
 
     dataset = _resolve_upload_dataset(dataset_path)
     return SQLAgent().answer(req.question, str(dataset))
@@ -269,12 +289,18 @@ def recent_runs(limit: int = Query(default=10, ge=1, le=50)) -> list[dict[str, A
 
 
 @app.post("/memory/search", dependencies=[Depends(require_api_key)])
-def memory_search(query: str, top_k: int = Query(default=3, ge=1, le=10)) -> list[dict[str, Any]]:
+def memory_search(
+    query: str, top_k: int = Query(default=3, ge=1, le=10)
+) -> list[dict[str, Any]]:
     """Search prior run knowledge stored in the vector memory."""
     return memory.search(query, top_k)
 
 
-@app.post("/deploy/{run_id}", response_model=DeployResponse, dependencies=[Depends(require_api_key)])
+@app.post(
+    "/deploy/{run_id}",
+    response_model=DeployResponse,
+    dependencies=[Depends(require_api_key)],
+)
 def deploy_run(run_id: str) -> DeployResponse:
     """Package a finished run's best model for production serving."""
     from app.agents.deploy import DeploymentAgent
@@ -296,14 +322,18 @@ def predict(req: PredictRequest) -> dict[str, Any]:
     bundle_dir = settings.deploy_dir_path / Path(req.run_id).name
     predictor = bundle_dir / "predict.py"
     if not predictor.is_file():
-        raise HTTPException(status_code=404, detail="Deployment not found; deploy the run first.")
+        raise HTTPException(
+            status_code=404, detail="Deployment not found; deploy the run first."
+        )
 
     import importlib.util
     import sys
 
     spec = importlib.util.spec_from_file_location("_bundle_predict", predictor)
     if spec is None or spec.loader is None:
-        raise HTTPException(status_code=500, detail="Could not load the predictor module.")
+        raise HTTPException(
+            status_code=500, detail="Could not load the predictor module."
+        )
     module = importlib.util.module_from_spec(spec)
     sys.modules["_bundle_predict"] = module
     spec.loader.exec_module(module)
@@ -314,7 +344,9 @@ def predict(req: PredictRequest) -> dict[str, Any]:
     try:
         predictions = module.predict_csv(dataset)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Prediction failed: {exc}") from exc
+        raise HTTPException(
+            status_code=400, detail=f"Prediction failed: {exc}"
+        ) from exc
     return {"run_id": req.run_id, "predictions": predictions}
 
 
@@ -410,10 +442,14 @@ def _resolve_upload_dataset(dataset_path: str) -> Path:
     uploads_root = settings.upload_dir_path.resolve()
     raw = Path(dataset_path)
     if raw.is_absolute() and not raw.resolve().is_relative_to(uploads_root):
-        raise HTTPException(status_code=400, detail="dataset_path must reference an uploaded dataset.")
+        raise HTTPException(
+            status_code=400, detail="dataset_path must reference an uploaded dataset."
+        )
     dataset = uploads_root / raw.name
     if not dataset.is_file():
-        raise HTTPException(status_code=404, detail=f"Uploaded file not found: {raw.name}")
+        raise HTTPException(
+            status_code=404, detail=f"Uploaded file not found: {raw.name}"
+        )
     return dataset
 
 
@@ -448,8 +484,15 @@ def _record_artifacts(run_id: str, result: dict[str, Any]) -> None:
     metrics = dict(best.get("test_metrics") or {})
     tracking.log_run(
         run_id,
-        params={"target": result.get("target"), "task": result.get("task"), "model": best.get("model")},
-        metrics={"cv_mean": best.get("cv_mean"), **{f"test_{k}": v for k, v in metrics.items()}},
+        params={
+            "target": result.get("target"),
+            "task": result.get("task"),
+            "model": best.get("model"),
+        },
+        metrics={
+            "cv_mean": best.get("cv_mean"),
+            **{f"test_{k}": v for k, v in metrics.items()},
+        },
         tags={"status": "succeeded"},
     )
     summary = _memory_summary(result)

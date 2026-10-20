@@ -18,7 +18,14 @@ import streamlit as st
 import ui
 
 API_BASE = os.environ.get("DS_TEAM_API_BASE", "http://localhost:8000").rstrip("/")
+API_KEY = os.environ.get("DS_TEAM_API_KEY", "").strip()
 ASSETS_DIR = Path(__file__).resolve().parents[1] / "assets"
+
+
+def _auth_headers() -> dict[str, str]:
+    """Send the API key when the backend has auth enabled."""
+    return {"X-API-Key": API_KEY} if API_KEY else {}
+
 
 STATUS_LABELS = {
     "pending": "Queued",
@@ -195,6 +202,7 @@ def run_analysis(base: str, uploaded, target: str | None, tune: bool) -> None:
             upload_resp = requests.post(
                 f"{base}/upload",
                 files={"file": (uploaded.name, uploaded.getvalue(), "text/csv")},
+                headers=_auth_headers(),
                 timeout=60,
             )
         except requests.RequestException:
@@ -204,6 +212,13 @@ def run_analysis(base: str, uploaded, target: str | None, tune: bool) -> None:
                 hint="Check the connection and try again.",
             )
             return
+    if upload_resp.status_code == 401:
+        ui.error_state(
+            "The analysis service rejected this session's API key.",
+            title="Not authorized",
+            hint="Set DS_TEAM_API_KEY to the same value as the backend API_KEY.",
+        )
+        return
     if upload_resp.status_code != 200:
         ui.error_state(
             "The service could not read this file. Check that it is a valid CSV "
@@ -217,6 +232,7 @@ def run_analysis(base: str, uploaded, target: str | None, tune: bool) -> None:
         run_resp = requests.post(
             f"{base}/workflow",
             json={"filename": filename, "target": target or None, "tune": tune},
+            headers=_auth_headers(),
             timeout=30,
         )
     except requests.RequestException:
@@ -250,7 +266,9 @@ def poll_workflow(base: str, run_id: str) -> dict | None:
 
     for _ in range(600):  # up to ~10 minutes
         try:
-            record = requests.get(f"{base}/workflow/{run_id}", timeout=30).json()
+            record = requests.get(
+                f"{base}/workflow/{run_id}", headers=_auth_headers(), timeout=30
+            ).json()
         except (requests.RequestException, ValueError):
             time.sleep(1)
             continue
@@ -397,7 +415,7 @@ def _clean_report(markdown: str) -> str:
 # --------------------------------------------------------------------------- #
 def history_tab(base: str) -> None:
     try:
-        runs = requests.get(f"{base}/runs", timeout=15).json()
+        runs = requests.get(f"{base}/runs", headers=_auth_headers(), timeout=15).json()
     except (requests.RequestException, ValueError):
         ui.error_state(
             "The analysis service is not responding right now.",
@@ -445,7 +463,9 @@ def history_tab(base: str) -> None:
 
 def _load_run(base: str, run_id: str) -> dict | None:
     try:
-        record = requests.get(f"{base}/workflow/{run_id}", timeout=15).json()
+        record = requests.get(
+            f"{base}/workflow/{run_id}", headers=_auth_headers(), timeout=15
+        ).json()
     except (requests.RequestException, ValueError):
         ui.error_state(
             "The run could not be loaded right now.",
@@ -496,7 +516,12 @@ def chat_tab(base: str) -> None:
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
-                    response = requests.post(f"{base}/chat", json=payload, timeout=120)
+                    response = requests.post(
+                        f"{base}/chat",
+                        json=payload,
+                        headers=_auth_headers(),
+                        timeout=120,
+                    )
                     answer = response.json().get("answer") or (
                         "The assistant did not return an answer. Try rephrasing "
                         "the question."
@@ -515,7 +540,7 @@ def chat_tab(base: str) -> None:
 @st.cache_data(ttl=30)
 def _probe(base: str) -> str | None:
     try:
-        data = requests.get(f"{base}/", timeout=5).json()
+        data = requests.get(f"{base}/", headers=_auth_headers(), timeout=5).json()
         return data.get("provider")
     except (requests.RequestException, ValueError):
         return None
