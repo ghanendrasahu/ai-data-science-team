@@ -19,8 +19,18 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    Query,
+    Security,
+    UploadFile,
+)
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel, Field
 
 from app.agents.chatbot import ChatbotAgent
@@ -34,11 +44,19 @@ app = FastAPI(title=settings.app_name, version=settings.app_version)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=settings.backend_origins_list,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def require_api_key(x_api_key: str | None = Security(_api_key_header)) -> None:
+    """Gate mutating endpoints when ``API_KEY`` is configured (off when empty)."""
+    if settings.api_key and x_api_key != settings.api_key:
+        raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key header.")
 
 _chatbot = ChatbotAgent()
 
@@ -140,7 +158,7 @@ def monitoring_overview() -> dict[str, Any]:
     }
 
 
-@app.post("/upload")
+@app.post("/upload", dependencies=[Depends(require_api_key)])
 async def upload(file: UploadFile = File(...)) -> dict[str, Any]:  # noqa: B008 - FastAPI injects the file
     if not file.filename or not file.filename.lower().endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are supported.")
@@ -152,7 +170,7 @@ async def upload(file: UploadFile = File(...)) -> dict[str, Any]:  # noqa: B008 
     return {"filename": destination.name, "path": str(destination)}
 
 
-@app.post("/workflow", response_model=RunResponse)
+@app.post("/workflow", response_model=RunResponse, dependencies=[Depends(require_api_key)])
 def start_workflow(req: RunRequest, background_tasks: BackgroundTasks) -> RunResponse:
     dataset_path = settings.upload_dir_path / Path(req.filename).name
     if not dataset_path.is_file():
@@ -178,7 +196,7 @@ def list_runs(limit: int = Query(default=20, ge=1, le=100)) -> list[dict[str, An
     return get_store().list_runs(limit)
 
 
-@app.post("/chat")
+@app.post("/chat", dependencies=[Depends(require_api_key)])
 def chat(req: ChatRequest) -> dict[str, str]:
     return {"answer": _chatbot.answer(req.question, req.context)}
 
@@ -201,7 +219,7 @@ def get_report(name: str) -> dict[str, str]:
     return {"name": candidate.name, "markdown": candidate.read_text(encoding="utf-8")}
 
 
-@app.post("/sql")
+@app.post("/sql", dependencies=[Depends(require_api_key)])
 def run_sql_query(req: SQLRequest) -> dict[str, Any]:
     """Natural-language SQL question against an uploaded dataset."""
     from app.agents.sql_agent import SQLAgent
@@ -216,7 +234,18 @@ def run_sql_query(req: SQLRequest) -> dict[str, Any]:
     if not dataset_path:
         raise HTTPException(status_code=404, detail="No dataset available; upload or start a run first.")
 
-    return SQLAgent().answer(req.question, dataset_path)
+    # Containment: absolute paths must resolve inside uploads/; relative or
+    # arbitrary inputs are flattened to a file name inside uploads/. This
+    # blocks reading arbitrary files from disk (e.g. `.env`) via this route.
+    uploads_root = settings.upload_dir_path.resolve()
+    raw = Path(dataset_path)
+    if raw.is_absolute() and not raw.resolve().is_relative_to(uploads_root):
+        raise HTTPException(status_code=400, detail="dataset_path must reference an uploaded dataset.")
+    dataset = uploads_root / raw.name
+    if not dataset.is_file():
+        raise HTTPException(status_code=404, detail=f"Uploaded file not found: {raw.name}")
+
+    return SQLAgent().answer(req.question, str(dataset))
 
 
 @app.get("/runs/recent")
@@ -225,13 +254,13 @@ def recent_runs(limit: int = Query(default=10, ge=1, le=50)) -> list[dict[str, A
     return tracking.recent_runs(limit)
 
 
-@app.post("/memory/search")
+@app.post("/memory/search", dependencies=[Depends(require_api_key)])
 def memory_search(query: str, top_k: int = Query(default=3, ge=1, le=10)) -> list[dict[str, Any]]:
     """Search prior run knowledge stored in the vector memory."""
     return memory.search(query, top_k)
 
 
-@app.post("/deploy/{run_id}", response_model=DeployResponse)
+@app.post("/deploy/{run_id}", response_model=DeployResponse, dependencies=[Depends(require_api_key)])
 def deploy_run(run_id: str) -> DeployResponse:
     """Package a finished run's best model for production serving."""
     from app.agents.deploy import DeploymentAgent
@@ -247,7 +276,7 @@ def deploy_run(run_id: str) -> DeployResponse:
     return DeployResponse(run_id=run_id, path=bundle["path"], status="deployed")
 
 
-@app.post("/predict")
+@app.post("/predict", dependencies=[Depends(require_api_key)])
 def predict(req: PredictRequest) -> dict[str, Any]:
     """Run predictions with a deployed model against a CSV file."""
     bundle_dir = settings.deploy_dir_path / Path(req.run_id).name
@@ -275,7 +304,7 @@ def predict(req: PredictRequest) -> dict[str, Any]:
     return {"run_id": req.run_id, "predictions": predictions}
 
 
-@app.post("/export/github/{run_id}")
+@app.post("/export/github/{run_id}", dependencies=[Depends(require_api_key)])
 def export_github(run_id: str) -> dict[str, Any]:
     """Publish a run's report to a configured GitHub repository."""
     from app.services.github import is_configured, publish_report

@@ -47,6 +47,16 @@ class Settings(BaseSettings):
     feature_selection: bool = True
     max_features: int = 0
 
+    # Explicit CORS allowlist: "*" is rejected by browsers when credentials are
+    # in play; never re-add it here.
+    backend_origins: str = (
+        "http://localhost:8000,http://localhost:5173,"
+        "http://localhost:3000,http://localhost:8501"
+    )
+    # When set, every mutating endpoint requires the `X-API-Key` header.
+    # Empty string = auth disabled (development convenience).
+    api_key: str = ""
+
     github_token: str = ""
     github_repo: str = ""
     mlflow_tracking_uri: str = ""
@@ -66,6 +76,10 @@ class Settings(BaseSettings):
     @property
     def deploy_dir_path(self) -> Path:
         return self._ensure(PROJECT_ROOT / self.deploy_dir)
+
+    @property
+    def backend_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.backend_origins.split(",") if origin.strip()]
 
     @property
     def sqlite_path(self) -> Path:
