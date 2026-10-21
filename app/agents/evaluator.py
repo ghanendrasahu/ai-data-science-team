@@ -6,7 +6,8 @@ import json
 from typing import Any
 
 from app.agents.base import BaseAgent
-from app.tools.sklearn_tool import feature_importance
+from app.tools.csv_tool import load_csv
+from app.tools.sklearn_tool import feature_importance, permutation_summary
 
 
 class EvaluatorAgent(BaseAgent):
@@ -28,6 +29,19 @@ class EvaluatorAgent(BaseAgent):
             except (OSError, ValueError, KeyError, EOFError):
                 importances = {}
 
+        # Model-agnostic explainability - covers every estimator in the zoo.
+        permutation = {}
+        if model_path:
+            source = state.get("feature_path") or state.get("dataset_path")
+            target = state.get("target")
+            if source and target:
+                try:
+                    df = load_csv(source)
+                    if target in df.columns:
+                        permutation = permutation_summary(model_path, df, df[target])
+                except (OSError, ValueError, KeyError, EOFError, RuntimeError):
+                    permutation = {}
+
         evaluation = {
             "best_model": best.get("model"),
             "best_cv_score": best.get("cv_mean"),
@@ -39,6 +53,7 @@ class EvaluatorAgent(BaseAgent):
                 reverse=True,
             ),
             "feature_importance": importances,
+            "permutation_importance": permutation,
         }
 
         narrative = self.llm.complete(

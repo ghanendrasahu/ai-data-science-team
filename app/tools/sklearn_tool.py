@@ -9,11 +9,31 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.feature_selection import SelectKBest, f_classif, f_regression
-from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.model_selection import (
+    GridSearchCV,
+    cross_val_score,
+    train_test_split,
+)
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 
 from app.tools.pandas_tool import is_numeric
+
+# Small, fast per-family grids so `tune=True` is a real hyperparameter search.
+_PARAM_GRIDS: dict[str, dict[str, list]] = {
+    "Logistic Regression": {"model__C": [0.1, 1.0, 10.0]},
+    "Decision Tree": {"model__max_depth": [3, 6, None], "model__min_samples_leaf": [1, 5]},
+    "Random Forest": {"model__n_estimators": [100, 200], "model__max_depth": [None, 10]},
+    "KNN": {"model__n_neighbors": [5, 11, 21]},
+    "SVM": {"model__C": [0.5, 2.0], "model__gamma": ["scale", 0.05]},
+    "Linear Regression": {},
+    "XGBoost": {"model__n_estimators": [100, 200], "model__learning_rate": [0.05, 0.1]},
+}
+
+
+def _param_grid(name: str) -> dict[str, list] | None:
+    grid = _PARAM_GRIDS.get(name)
+    return grid or None
 
 
 def detect_task(y: pd.Series) -> str:
@@ -141,20 +161,44 @@ def train_all(
     best: dict[str, Any] | None = None
     artifact: dict[str, Any] | None = None
 
+    tuned_any = False
     for name, estimator in zoo.items():
         try:
-            pipe = Pipeline([("scale", StandardScaler(with_mean=False)), ("model", estimator)])
-            scores = cross_val_score(pipe, X_train, y_train, cv=cv_folds, scoring=_scoring(task), n_jobs=-1)
-            pipe.fit(X_train, y_train)
+            base = Pipeline([("scale", StandardScaler(with_mean=False)), ("model", estimator)])
+            grid = _param_grid(name) if tune else None
+            if grid:
+                search = GridSearchCV(
+                    base,
+                    grid,
+                    cv=min(cv_folds, 3),
+                    scoring=_scoring(task),
+                    n_jobs=-1,
+                )
+                search.fit(X_train, y_train)
+                pipe = search.best_estimator_
+                cv_mean = float(search.best_score_)
+                cv_std = float(search.cv_results_["std_test_score"][search.best_index_])
+                tuned_params = {k: str(v) for k, v in search.best_params_.items()}
+                tuned_any = True
+            else:
+                scores = cross_val_score(
+                    base, X_train, y_train, cv=cv_folds, scoring=_scoring(task), n_jobs=-1
+                )
+                base.fit(X_train, y_train)
+                pipe = base
+                cv_mean, cv_std = float(np.mean(scores)), float(np.std(scores))
+                tuned_params = None
             metrics = _evaluate(pipe, X_test, y_test, task)
 
             entry = {
                 "model": name,
                 "task": task,
-                "cv_mean": round(float(np.mean(scores)), 4),
-                "cv_std": round(float(np.std(scores)), 4),
+                "cv_mean": round(cv_mean, 4),
+                "cv_std": round(cv_std, 4),
                 "test_metrics": metrics,
             }
+            if tuned_params:
+                entry["tuned_params"] = tuned_params
             results.append(entry)
             if best is None or entry["cv_mean"] > best["cv_mean"]:
                 best = entry
@@ -181,6 +225,7 @@ def train_all(
         "feature_names": list(X.columns),
         "feature_selection_applied": bool(dropped),
         "features_dropped": dropped,
+        "tuning_enabled": tuned_any,
     }
 
 
@@ -232,3 +277,29 @@ def feature_importance(artifact_path: str | Path) -> dict[str, float]:
     importances = model.feature_importances_
     ranked = sorted(zip(names, importances), key=lambda item: item[1], reverse=True)
     return {name: round(float(score), 4) for name, score in ranked[:20]}
+
+
+def permutation_summary(
+    artifact_path: str | Path,
+    X: pd.DataFrame,
+    y: pd.Series,
+    n_repeats: int = 5,
+    top: int = 20,
+) -> dict[str, float]:
+    """Model-agnostic explainability: permutation importance on the best
+    pipeline. Works for every estimator (KNN/SVM/linear included), unlike
+    ``feature_importance`` which needs ``feature_importances_``.
+    """
+    from sklearn.inspection import permutation_importance as _sk_permutation
+
+    artifact = joblib.load(artifact_path)
+    pipe = artifact["pipeline"]
+    names = artifact.get("feature_names") or list(X.columns)
+    X_aligned = X[names]  # trained features only, in training order
+
+    label_encoder = artifact.get("label_encoder")
+    y_eval = label_encoder.transform(y) if label_encoder is not None else y.astype(float)
+
+    result = _sk_permutation(pipe, X_aligned, y_eval, n_repeats=n_repeats, random_state=42, n_jobs=-1)
+    ranked = sorted(zip(names, result.importances_mean), key=lambda item: item[1], reverse=True)
+    return {name: round(float(score), 4) for name, score in ranked[:top]}
