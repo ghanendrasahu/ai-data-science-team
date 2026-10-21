@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 try:
@@ -96,7 +96,7 @@ def _persist_snapshot(
                 json.dumps(params or {}),
                 json.dumps(metrics or {}),
                 json.dumps(tags or {}),
-                datetime.now(timezone.utc).isoformat(),
+                datetime.now(UTC).isoformat(),
             ),
         )
     return {"run_id": run_id, "params": params or {}, "metrics": metrics or {}}
