@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint
+        run: ruff check .
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Run test suite (no LLM keys needed - mock provider)
+        env:
+          LLM_PROVIDER: ""
+        run: python -m pytest tests -q
+
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build hardened image (two-stage, non-root)
+        run: docker build -t ai-data-science-team:ci .
+
+      - name: Verify image runs non-root and serves /health
+        run: |
+          docker run -d --name probe -p 8000:8000 ai-data-science-team:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/health >/dev/null 2>&1; then
+              echo "health OK"
+              docker rm -f probe
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "health check never went green"
+          docker logs probe
+          docker rm -f probe
+          exit 1
