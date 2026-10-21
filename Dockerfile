@@ -2,8 +2,8 @@
 # Two-stage: wheels resolved first, runtime installs only wheels (no compiler).
 FROM python:3.11-slim AS wheels
 ENV PIP_NO_CACHE_DIR=1
-COPY requirements.txt .
 WORKDIR /build
+COPY requirements.txt .
 RUN pip wheel --wheel-dir /wheels -r requirements.txt
 
 FROM python:3.11-slim
