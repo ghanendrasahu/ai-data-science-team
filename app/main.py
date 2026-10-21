@@ -16,6 +16,7 @@ Endpoints
 from __future__ import annotations
 
 import shutil
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -107,6 +108,29 @@ class DeployResponse(BaseModel):
     run_id: str
     path: str
     status: str
+
+
+class PythonRunRequest(BaseModel):
+    code: str = Field(..., min_length=1, max_length=20000)
+    data_files: list[str] = Field(default_factory=list, max_length=10)
+    timeout_seconds: int | None = Field(default=None, ge=1, le=300)
+
+
+class AnomalyRequest(BaseModel):
+    dataset_path: str
+    contamination: float = Field(default=0.05, ge=0.005, le=0.5)
+
+
+class StatsRequest(BaseModel):
+    dataset_path: str
+    spec: dict[str, Any]
+
+
+class ForecastRequest(BaseModel):
+    dataset_path: str
+    column: str | None = None
+    horizon: int = Field(default=10, ge=1, le=90)
+    period: int | None = Field(default=None, ge=2, le=52)
 
 
 # --------------------------------------------------------------------------- #
@@ -234,17 +258,7 @@ def run_sql_query(req: SQLRequest) -> dict[str, Any]:
     if not dataset_path:
         raise HTTPException(status_code=404, detail="No dataset available; upload or start a run first.")
 
-    # Containment: absolute paths must resolve inside uploads/; relative or
-    # arbitrary inputs are flattened to a file name inside uploads/. This
-    # blocks reading arbitrary files from disk (e.g. `.env`) via this route.
-    uploads_root = settings.upload_dir_path.resolve()
-    raw = Path(dataset_path)
-    if raw.is_absolute() and not raw.resolve().is_relative_to(uploads_root):
-        raise HTTPException(status_code=400, detail="dataset_path must reference an uploaded dataset.")
-    dataset = uploads_root / raw.name
-    if not dataset.is_file():
-        raise HTTPException(status_code=404, detail=f"Uploaded file not found: {raw.name}")
-
+    dataset = _resolve_upload_dataset(dataset_path)
     return SQLAgent().answer(req.question, str(dataset))
 
 
@@ -315,6 +329,92 @@ def export_github(run_id: str) -> dict[str, Any]:
         return publish_report(run_id)
     except RuntimeError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/python", dependencies=[Depends(require_api_key)])
+def run_python_endpoint(req: PythonRunRequest) -> dict[str, Any]:
+    """Execute LLM-written analysis code in a sandboxed child interpreter."""
+    from app.tools import python_tool
+
+    try:
+        scratch = settings.upload_dir_path / f"py_{uuid.uuid4().hex[:12]}"
+        sources: dict[str, str] = {}
+        for name in req.data_files:
+            dataset = _resolve_upload_dataset(name)
+            sources[dataset.name] = str(dataset)
+        result = python_tool.run_python(
+            req.code,
+            work_dir=scratch,
+            data_files=sources,
+            timeout_seconds=req.timeout_seconds or settings.python_tool_timeout,
+        )
+    except python_tool.DeniedImport as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return result
+
+
+@app.post("/anomalies", dependencies=[Depends(require_api_key)])
+def detect_anomalies_endpoint(req: AnomalyRequest) -> dict[str, Any]:
+    """Flag anomalous rows of an uploaded dataset (IsolationForest)."""
+    from app.tools.anomaly_tool import detect_anomalies
+    from app.tools.csv_tool import load_csv
+
+    dataset = _resolve_upload_dataset(req.dataset_path)
+    df = load_csv(str(dataset))
+    if len(df) > 200_000:
+        df = df.head(200_000)
+    try:
+        return detect_anomalies(df, contamination=req.contamination)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/stats", dependencies=[Depends(require_api_key)])
+def run_statistical_test_endpoint(req: StatsRequest) -> dict[str, Any]:
+    """Run a hypothesis test against an uploaded dataset."""
+    from app.tools.csv_tool import load_csv
+    from app.tools.stats_tool import run_statistical_test
+
+    dataset = _resolve_upload_dataset(req.dataset_path)
+    df = load_csv(str(dataset))
+    try:
+        return run_statistical_test(df, req.spec)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/forecast", dependencies=[Depends(require_api_key)])
+def forecast_endpoint(req: ForecastRequest) -> dict[str, Any]:
+    """Forecast future values of a numeric column from an uploaded series."""
+    from app.tools.forecast_tool import forecast_csv
+
+    dataset = _resolve_upload_dataset(req.dataset_path)
+    try:
+        return forecast_csv(
+            str(dataset),
+            column=req.column,
+            horizon=req.horizon,
+            period=req.period,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+def _resolve_upload_dataset(dataset_path: str) -> Path:
+    """Contain uploaded-dataset references inside uploads/.
+
+    Absolute paths must resolve inside ``uploads/``; relative or arbitrary
+    inputs are flattened to a file name inside ``uploads/``. This blocks
+    reading arbitrary files from disk (e.g. ``.env``) via API routes.
+    """
+    uploads_root = settings.upload_dir_path.resolve()
+    raw = Path(dataset_path)
+    if raw.is_absolute() and not raw.resolve().is_relative_to(uploads_root):
+        raise HTTPException(status_code=400, detail="dataset_path must reference an uploaded dataset.")
+    dataset = uploads_root / raw.name
+    if not dataset.is_file():
+        raise HTTPException(status_code=404, detail=f"Uploaded file not found: {raw.name}")
+    return dataset
 
 
 # --------------------------------------------------------------------------- #

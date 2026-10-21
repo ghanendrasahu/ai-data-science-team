@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     feature_selection: bool = True
     max_features: int = 0
 
+    # Hard timeout (seconds) for the sandboxed python tool child process.
+    python_tool_timeout: int = 90
+
     # Explicit CORS allowlist: "*" is rejected by browsers when credentials are
     # in play; never re-add it here.
     backend_origins: str = (
