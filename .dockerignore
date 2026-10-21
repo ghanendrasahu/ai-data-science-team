@@ -1,0 +1,34 @@
+# --- Secrets / local state must never enter image layers ---
+.env
+ai_ds_team.db
+*.sqlite3
+*.db
+
+# --- User/runtime data ---
+uploads/
+reports/
+models/
+deployments/
+!uploads/.gitkeep
+!reports/.gitkeep
+!models/.gitkeep
+
+# --- Environments & tooling caches ---
+venv/
+.venv/
+.venv-test/
+.git/
+.github/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+__pycache__/
+*.py[cod]
+.vscode/
+.idea/
+Dockerfile
+docker-compose.yml
+Makefile
+
+# --- Frontend build inputs (React dashboard lives in its own image) ---
+frontend/node_modules/
