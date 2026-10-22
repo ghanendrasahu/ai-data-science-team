@@ -1,12 +1,13 @@
 """Streamlit frontend for the AI Data Science Team.
 
-Talks to the FastAPI backend (``http://localhost:8000`` by default) and walks
-the user through: upload -> run pipeline -> inspect EDA / models / report ->
-chat with the dataset.
+Talks to the FastAPI backend (``DS_TEAM_API_BASE`` env, default
+``http://localhost:8000``) and walks the user through: upload -> run pipeline
+-> inspect EDA / models / report -> chat with the dataset.
 """
 
 from __future__ import annotations
 
+import os
 import time
 
 import requests
@@ -14,7 +15,10 @@ import streamlit as st
 
 st.set_page_config(page_title="AI Data Science Team", page_icon="📊", layout="wide")
 
-API_BASE = "http://localhost:8000"
+# On Streamlit Cloud there is no localhost backend; set DS_TEAM_API_BASE to
+# the URL of the deployed FastAPI service (it stays overridable in the
+# sidebar).
+API_BASE = os.environ.get("DS_TEAM_API_BASE", "http://localhost:8000")
 
 st.markdown(
     "<style>"
