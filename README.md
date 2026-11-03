@@ -18,6 +18,10 @@ Traditional data science workflows require multiple roles:
 
 This project combines these responsibilities into a team of AI agents.
 
+> **Live demo:** https://ai-data-science-team-ui.onrender.com
+>
+> Free-tier hosting: the first load after idle can take 30-60 seconds.
+
 ## Workflow
 
 ```
