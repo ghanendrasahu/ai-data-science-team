@@ -1,4 +1,4 @@
-# AI Data Science Team ðŸ¤–ðŸ“Š
+# AI Data Science Team 🤖📊
 
 An autonomous multi-agent AI system that performs end-to-end data science workflows using Large Language Models, Agentic AI, and Machine Learning.
 
@@ -6,15 +6,15 @@ The goal of this project is to build an AI-powered data science team that can an
 
 ---
 
-# ðŸš€ Project Overview
+# 🚀 Project Overview
 
 Traditional data science workflows require multiple roles:
 
-* Data Analyst â†’ explores data
-* Data Engineer â†’ cleans and prepares data
-* ML Engineer â†’ trains models
-* Data Scientist â†’ evaluates results
-* Business Analyst â†’ creates reports
+* Data Analyst → explores data
+* Data Engineer → cleans and prepares data
+* ML Engineer → trains models
+* Data Scientist → evaluates results
+* Business Analyst → creates reports
 
 This project combines these responsibilities into a team of AI agents.
 
@@ -55,7 +55,7 @@ EDA Agent    Cleaning Agent   Feature Agent
 
 ---
 
-# âœ¨ Features
+# ✨ Features
 
 ## Dataset Understanding
 
@@ -113,7 +113,7 @@ Supported models:
 
 ## SQL Agent
 
-* Natural-language questions â†’ read-only SELECT queries
+* Natural-language questions → read-only SELECT queries
 * Aggregate / filter / group analysis on uploaded datasets
 * Safe in-memory SQLite execution (only SELECT allowed)
 
@@ -159,7 +159,7 @@ Users can ask:
 
 ---
 
-# ðŸ§  AI Architecture
+# 🧠 AI Architecture
 
 ## Agent Framework
 
@@ -181,7 +181,7 @@ Users can ask:
 
 ---
 
-# ðŸ›  Tech Stack
+# 🛠 Tech Stack
 
 ## Backend
 
@@ -222,60 +222,60 @@ Users can ask:
 
 ---
 
-# ðŸ“ Project Structure
+# 📁 Project Structure
 
 ```
 ai-data-science-team/
 
-â”‚
-â”œâ”€â”€ app/
-â”‚   â”œâ”€â”€ agents/
-â”‚   â”‚   â”œâ”€â”€ planner.py
-â”‚   â”‚   â”œâ”€â”€ eda.py
-â”‚   â”‚   â”œâ”€â”€ cleaning.py
-â”‚   â”‚   â”œâ”€â”€ feature.py
-â”‚   â”‚   â”œâ”€â”€ trainer.py
-â”‚   â”‚   â”œâ”€â”€ evaluator.py
-â”‚   â”‚   â”œâ”€â”€ report.py
-â”‚   â”‚   â””â”€â”€ chatbot.py
-â”‚   â”‚
-â”‚   â”œâ”€â”€ graph/
-â”‚   â”‚   â”œâ”€â”€ workflow.py
-â”‚   â”‚   â””â”€â”€ state.py
-â”‚   â”‚
-â”‚   â”œâ”€â”€ tools/
-â”‚   â”‚   â”œâ”€â”€ csv_tool.py
-â”‚   â”‚   â”œâ”€â”€ pandas_tool.py
-â”‚   â”‚   â”œâ”€â”€ plot_tool.py
-â”‚   â”‚   â””â”€â”€ sklearn_tool.py
-â”‚   â”‚
-â”‚   â”œâ”€â”€ services/
-â”‚   â”‚   â”œâ”€â”€ llm.py
-â”‚   â”‚   â”œâ”€â”€ store.py
-â”‚   â”‚   â”œâ”€â”€ tracking.py
-â”‚   â”‚   â”œâ”€â”€ memory.py
-â”‚   â”‚   â””â”€â”€ github.py
-â”‚   â”‚
-â”‚   â”œâ”€â”€ config.py
-â”‚   â””â”€â”€ main.py
-â”‚
-â”œâ”€â”€ frontend/
-â”‚   â””â”€â”€ app.py
+│
+├── app/
+│   ├── agents/
+│   │   ├── planner.py
+│   │   ├── eda.py
+│   │   ├── cleaning.py
+│   │   ├── feature.py
+│   │   ├── trainer.py
+│   │   ├── evaluator.py
+│   │   ├── report.py
+│   │   └── chatbot.py
+│   │
+│   ├── graph/
+│   │   ├── workflow.py
+│   │   └── state.py
+│   │
+│   ├── tools/
+│   │   ├── csv_tool.py
+│   │   ├── pandas_tool.py
+│   │   ├── plot_tool.py
+│   │   └── sklearn_tool.py
+│   │
+│   ├── services/
+│   │   ├── llm.py
+│   │   ├── store.py
+│   │   ├── tracking.py
+│   │   ├── memory.py
+│   │   └── github.py
+│   │
+│   ├── config.py
+│   └── main.py
+│
+├── frontend/
+│   └── app.py
 
-â”œâ”€â”€ uploads/
-â”œâ”€â”€ models/
-â”œâ”€â”€ reports/
-â”œâ”€â”€ deployments/
-â”‚
-â”œâ”€â”€ requirements.txt
-â”œâ”€â”€ Dockerfile
-â”œâ”€â”€ .env.example
-â””â”€â”€ README.md
+├── uploads/
+├── models/
+├── reports/
+├── deployments/
+│
+├── requirements.txt
+├── Dockerfile
+├── .env.example
+└── README.md
 ```
 
 ---
 
-# âš™ï¸ Installation
+# ⚙️ Installation
 
 ## Clone Repository
 
@@ -317,7 +317,7 @@ pip install -r requirements.txt
 
 ---
 
-# ðŸ”‘ Environment Setup
+# 🔑 Environment Setup
 
 Create `.env`
 
@@ -335,7 +335,7 @@ OLLAMA_MODEL=llama3
 
 ---
 
-# â–¶ï¸ Running the Application
+# ▶️ Running the Application
 
 ## Start Backend
 
@@ -359,22 +359,22 @@ streamlit run frontend/app.py
 
 ---
 
-# ðŸ—º Development Roadmap
+# 🗺 Development Roadmap
 
-## Phase 1 â€” Foundation
+## Phase 1 — Foundation
 
 * [x] Project structure
 * [x] FastAPI setup
 * [x] LLM connection
 * [x] Configuration management
 
-## Phase 2 â€” Data Processing
+## Phase 2 — Data Processing
 
 * [x] Dataset upload
 * [x] Data profiling
 * [x] Cleaning pipeline
 
-## Phase 3 â€” Agent Development
+## Phase 3 — Agent Development
 
 * [x] Planner Agent
 * [x] EDA Agent
@@ -382,20 +382,20 @@ streamlit run frontend/app.py
 * [x] ML Agent
 * [x] Evaluation Agent
 
-## Phase 4 â€” Agent Orchestration
+## Phase 4 — Agent Orchestration
 
 * [x] LangGraph workflow
 * [x] State management
 * [x] Memory
 
-## Phase 5 â€” Production
+## Phase 5 — Production
 
 * [x] Streamlit UI
 * [x] Docker
 * [x] Deployment
 * [x] Monitoring
 
-## Phase 6 â€” Platform Extensions
+## Phase 6 — Platform Extensions
 
 * [x] MCP tools (stdio server via `python -m app.mcp_server`)
 * [x] Vector database memory (cross-run retrieval)
@@ -407,7 +407,7 @@ streamlit run frontend/app.py
 
 ---
 
-# ðŸŽ¯ Future Improvements
+# 🎯 Future Improvements
 
 * Add vector database memory with real embeddings (FAISS / Chroma)
 * Add automated feature selection with tree-based importance
@@ -415,7 +415,7 @@ streamlit run frontend/app.py
 
 ---
 
-# ðŸ‘¨â€ðŸ’» Author
+# 👨‍💻 Author
 
 Built as a production-style GenAI + Agentic AI portfolio project.
 
