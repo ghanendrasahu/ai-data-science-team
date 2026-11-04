@@ -99,6 +99,23 @@ class OpenAIService:
         return str(self._llm.invoke(prompt).content)
 
 
+class GroqService(OpenAIService):
+    """LangChain OpenAI client pointed at Groq's compatible endpoint."""
+
+    name = "groq"
+
+    def __init__(self, api_key: str, model: str, base_url: str) -> None:
+        from langchain_openai import ChatOpenAI
+        from pydantic import SecretStr
+
+        self._llm = ChatOpenAI(
+            model=model,
+            api_key=SecretStr(api_key),
+            base_url=base_url,
+            temperature=0.2,
+        )
+
+
 class OllamaService:
     """Thin wrapper over LangChain's Ollama chat model."""
 
@@ -134,6 +151,10 @@ class LLMService:
             backend = AnthropicService(settings.anthropic_api_key, settings.anthropic_model)
         elif provider == "openai" and settings.openai_api_key:
             backend = OpenAIService(settings.openai_api_key, settings.openai_model)
+        elif provider == "groq" and settings.groq_api_key:
+            backend = GroqService(
+                settings.groq_api_key, settings.groq_model, settings.groq_base_url
+            )
         elif provider == "ollama":
             backend = OllamaService(settings.ollama_model, settings.ollama_base_url)
         else:
